@@ -3,11 +3,11 @@
 
 	<groupId>fr.tlrx.elasticsearch</groupId>
 	<artifactId>elasticsearch-river-ldap</artifactId>
-	<version>0.0.2-SNAPSHOT</version>
+	<version>0.0.3-SNAPSHOT</version>
 	<name>LDAP River for Elasticsearch</name>
 
 	<properties>
-		<elasticsearch.version>0.19.8</elasticsearch.version>
+		<elasticsearch.version>0.90.2</elasticsearch.version>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 	</properties>
 	
@@ -24,12 +24,17 @@
 			<name>Tanguy Leroux</name>
 			<email>tlrx.dev@gmail.com</email>
 		</developer>
+		<developer>
+			<id>jheys</id>
+			<name>Jim Heys</name>
+			<email>jheys@swerv.com</email>
+		</developer>
 	</developers>
 
 	<scm>
-		<connection>scm:git:git@github.com:tlrx/elasticsearch-river-ldap.git</connection>
-		<developerConnection>scm:git:git@github.com:tlrx/elasticsearch-river-ldap.git</developerConnection>
-		<url>http://github.com/tlrx/elasticsearch-river-ldap</url>
+		<connection>scm:git:git@github.com:jheys/elasticsearch-river-ldap.git</connection>
+		<developerConnection>scm:git:git@github.com:jheys/elasticsearch-river-ldap.git</developerConnection>
+		<url>http://github.com/jheys/elasticsearch-river-ldap</url>
 	</scm>
 
 	<dependencies>
