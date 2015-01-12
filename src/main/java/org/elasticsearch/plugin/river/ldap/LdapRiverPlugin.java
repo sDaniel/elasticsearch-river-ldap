@@ -1,7 +1,6 @@
 package org.elasticsearch.plugin.river.ldap;
 
 import org.elasticsearch.common.inject.Inject;
-import org.elasticsearch.common.inject.Module;
 import org.elasticsearch.plugins.AbstractPlugin;
 import org.elasticsearch.river.RiversModule;
 import org.elasticsearch.river.ldap.LdapRiverModule;
@@ -38,10 +37,7 @@ public class LdapRiverPlugin extends AbstractPlugin {
         return "LDAP River Plugin";
     }
 
-    @Override
-    public void processModule(Module module) {
-        if (module instanceof RiversModule) {
-            ((RiversModule) module).registerRiver("ldap", LdapRiverModule.class);
-        }
+    public void onModule(RiversModule module) {
+        module.registerRiver("solr", LdapRiverModule.class);
     }
 }
