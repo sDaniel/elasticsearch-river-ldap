@@ -3,6 +3,8 @@ package org.elasticsearch.river.ldap;
 import static org.elasticsearch.common.xcontent.XContentFactory.jsonBuilder;
 import static org.junit.Assert.assertEquals;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.apache.directory.server.annotations.CreateLdapServer;
 import org.apache.directory.server.annotations.CreateTransport;
 import org.apache.directory.server.core.annotations.ApplyLdifs;
@@ -12,6 +14,8 @@ import org.apache.directory.server.core.annotations.CreateIndex;
 import org.apache.directory.server.core.annotations.CreatePartition;
 import org.apache.directory.server.core.integ.AbstractLdapTestUnit;
 import org.apache.directory.server.core.integ.FrameworkRunner;
+import org.elasticsearch.action.count.CountResponse;
+import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.client.Client;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.index.query.QueryBuilders;
@@ -20,8 +24,12 @@ import org.elasticsearch.node.Node;
 import org.elasticsearch.node.NodeBuilder;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.MethodRule;
+import org.junit.rules.TestWatchman;
 import org.junit.runner.RunWith;
+import org.junit.runners.model.FrameworkMethod;
 
 /*
  * Licensed to ElasticSearch and Shay Banon under one
@@ -116,15 +124,23 @@ import org.junit.runner.RunWith;
         "ref: ldap://bar:10389/uid=clint,ou=users,ou=system" })
 public class LdapRiverTest extends AbstractLdapTestUnit {
 	
+
+	static final Logger logger = 
+		LoggerFactory.getLogger(LdapRiverTest.class);
+	
+	private static final String TYPE_PERSON = "person";
+	private static final String LDAPSERVER = "ldapserver0";
 	Node node = null;
+
+	private Client client;
 	
 	@Before
 	public void setUp() throws Exception{
 		node = NodeBuilder.nodeBuilder().local(true).node();
-		Client client = node.client();
+		client = node.client();
 		
 		try {
-			client.admin().indices().prepareDelete("_river", "ldapserver0").execute().actionGet();
+			client.admin().indices().prepareDelete("_river", LDAPSERVER).execute().actionGet();
 		} catch (IndexMissingException e) {
 			// Ok
 		}
@@ -138,8 +154,8 @@ public class LdapRiverTest extends AbstractLdapTestUnit {
 										.field("host", "localhost")
 										.field("port", 9389)
 										.field("ssl", false)
-										.field("userDn", "")
-										.field("credentials", "")
+										.field("userDn", "uid=admin,ou=system")
+										.field("credentials", "secret")
 										.field("filter", "(objectClass=person)")
 										.field("baseDn", "ou=system")
 										.field("scope", "")
@@ -148,30 +164,49 @@ public class LdapRiverTest extends AbstractLdapTestUnit {
 										.field("poll", 60000)
 									.endObject()
 									.startObject("index")
-										.field("index", "ldapserver0")
-										.field("type", "person")
+										.field("index", LDAPSERVER)
+										.field("type", TYPE_PERSON)
 									.endObject()
 								.endObject();
 		
-		node.client().prepareIndex("_river", "my_ldap_river", "_meta").setRefresh(true).setSource(xb).execute().actionGet();
-	}
-	
-	@Test
-    public void testLdapRiver() throws Exception {
-		Client client = node.client();
+		client.prepareIndex("_river", "my_ldap_river", "_meta").setRefresh(true).setSource(xb).execute().actionGet();
+		
 		
 		// Wait for river indexation
 		Thread.sleep(1000);
-		
-		// 4 people expected
-		assertEquals(4L, client.prepareCount("ldapserver0").setTypes("person").execute().actionGet().getCount());
-		assertEquals(3L, client.prepareSearch("ldapserver0").setTypes("person").setQuery(QueryBuilders.matchQuery("groups", "uidObject")).execute().actionGet().getHits().totalHits());
-				
-		// But Clint is definitley unique
-		assertEquals(1L, client.prepareSearch("ldapserver0").setTypes("person").setQuery(QueryBuilders.matchQuery("name", "clint")).execute().actionGet().getHits().totalHits());
+	}
+	
+	@Rule public MethodRule watchman = new TestWatchman() {
+	    public void starting(FrameworkMethod method) {
+	    	logger.info("Run Test {}...", method.getName());
+	    }
+	    public void succeeded(FrameworkMethod method) {
+	    	logger.info("Test {} succeeded.", method.getName());
+	    }
+	    public void failed(Throwable e, FrameworkMethod method) {
+	    	logger.error("Test {} failed with {}.", method.getName(), e);
+	    }
+	};
+	
+	@Test
+    public void testLdapRiverResultCount() throws Exception {
+		// 4 from sample data + 1 default LDAP administrator user
+		CountResponse resultsCount = client.prepareCount(LDAPSERVER).setQuery(QueryBuilders.termQuery("_type", TYPE_PERSON)).execute().actionGet();
+		assertEquals(5L, resultsCount.getCount());
+    }
 
-		assertEquals(1L, client.prepareSearch("ldapserver0").setTypes("person").setQuery(QueryBuilders.queryString("woo")).execute().actionGet().getHits().totalHits());
-		assertEquals(2, client.prepareMultiGet().add("ldapserver0", "person", "christopher").add("ldapserver0", "person", "john").execute().actionGet().getResponses().length);
+	@Test
+    public void testSearchGroups() throws Exception {
+		SearchResponse results = client.prepareSearch(LDAPSERVER).setTypes(TYPE_PERSON).setQuery(QueryBuilders.matchQuery("groups", "uidObject")).execute().actionGet();
+		assertEquals(3L, results.getHits().totalHits());
+    }
+
+	@Test
+    public void testSearchUniqueResult() throws Exception {
+		// But Clint is definitley unique
+		assertEquals(1L, client.prepareSearch(LDAPSERVER).setTypes(TYPE_PERSON).setQuery(QueryBuilders.matchQuery("name", "clint")).execute().actionGet().getHits().totalHits());
+		assertEquals(1L, client.prepareSearch(LDAPSERVER).setTypes(TYPE_PERSON).setQuery(QueryBuilders.queryString("woo")).execute().actionGet().getHits().totalHits());
+		assertEquals(2, client.prepareMultiGet().add(LDAPSERVER, TYPE_PERSON, "christopher").add(LDAPSERVER, TYPE_PERSON, "john").execute().actionGet().getResponses().length);
     }
 	
 	@After
