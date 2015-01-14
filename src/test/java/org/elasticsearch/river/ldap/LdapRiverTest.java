@@ -3,8 +3,6 @@ package org.elasticsearch.river.ldap;
 import static org.elasticsearch.common.xcontent.XContentFactory.jsonBuilder;
 import static org.junit.Assert.assertEquals;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.apache.directory.server.annotations.CreateLdapServer;
 import org.apache.directory.server.annotations.CreateTransport;
 import org.apache.directory.server.core.annotations.ApplyLdifs;
@@ -24,12 +22,8 @@ import org.elasticsearch.node.Node;
 import org.elasticsearch.node.NodeBuilder;
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.MethodRule;
-import org.junit.rules.TestWatchman;
 import org.junit.runner.RunWith;
-import org.junit.runners.model.FrameworkMethod;
 
 /*
  * Licensed to ElasticSearch and Shay Banon under one
@@ -123,11 +117,7 @@ import org.junit.runners.model.FrameworkMethod;
         "ref: ldap://foo:10389/uid=clint,ou=users,ou=system",
         "ref: ldap://bar:10389/uid=clint,ou=users,ou=system" })
 public class LdapRiverTest extends AbstractLdapTestUnit {
-	
 
-	static final Logger logger = 
-		LoggerFactory.getLogger(LdapRiverTest.class);
-	
 	private static final String TYPE_PERSON = "person";
 	private static final String LDAPSERVER = "ldapserver0";
 	Node node = null;
@@ -175,18 +165,6 @@ public class LdapRiverTest extends AbstractLdapTestUnit {
 		// Wait for river indexation
 		Thread.sleep(1000);
 	}
-	
-	@Rule public MethodRule watchman = new TestWatchman() {
-	    public void starting(FrameworkMethod method) {
-	    	logger.info("Run Test {}...", method.getName());
-	    }
-	    public void succeeded(FrameworkMethod method) {
-	    	logger.info("Test {} succeeded.", method.getName());
-	    }
-	    public void failed(Throwable e, FrameworkMethod method) {
-	    	logger.error("Test {} failed with {}.", method.getName(), e);
-	    }
-	};
 	
 	@Test
     public void testLdapRiverResultCount() throws Exception {

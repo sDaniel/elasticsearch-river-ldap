@@ -86,12 +86,12 @@ public class LdapRiver extends AbstractRiverComponent implements River {
 
     @SuppressWarnings("unchecked")
     @Inject
-    protected LdapRiver(RiverName riverName, RiverSettings settings, Client client) {
-        super(riverName, settings);
+    protected LdapRiver(RiverName riverName, RiverSettings riverSettings, Client client) {
+        super(riverName, riverSettings);
         this.client = client;
 
-        if (settings.settings().containsKey("ldap")) {
-            Map<String, Object> ldapSettings = (Map<String, Object>) settings.settings().get("ldap");
+        if (riverSettings.settings().containsKey("ldap")) {
+            Map<String, Object> ldapSettings = (Map<String, Object>) riverSettings.settings().get("ldap");
 
             userDn = XContentMapValues.nodeStringValue(ldapSettings.get("userDn"), null);
             credentials = XContentMapValues.nodeStringValue(ldapSettings.get("credentials"), null);
@@ -139,8 +139,8 @@ public class LdapRiver extends AbstractRiverComponent implements River {
             scope = null;
             poll = TimeValue.timeValueMinutes(60);
         }
-        if (settings.settings().containsKey("index")) {
-            Map<String, Object> indexSettings = (Map<String, Object>) settings.settings().get("index");
+        if (riverSettings.settings().containsKey("index")) {
+            Map<String, Object> indexSettings = (Map<String, Object>) riverSettings.settings().get("index");
             indexName = XContentMapValues.nodeStringValue(indexSettings.get("index"), "ldap");
             typeName = XContentMapValues.nodeStringValue(indexSettings.get("type"), "ldap");
             bulkSize = XContentMapValues.nodeIntegerValue(indexSettings.get("bulk_size"), 100);
@@ -158,6 +158,7 @@ public class LdapRiver extends AbstractRiverComponent implements River {
         }
     }
 
+    @Override
     public void start() {
         logger.info("starting ldap river [{}]: host [{}], port [{}], ssl [{}], username [{}], filter [{}], search [{}], indexing to [{}]/[{}], poll [{}]", 
                     riverIndexName, host, port, ssl, userDn, filter, baseDn, indexName, typeName, poll);
@@ -175,6 +176,7 @@ public class LdapRiver extends AbstractRiverComponent implements River {
         thread.start();
     }
 
+    @Override
     public void close() {
         if (closed) {
             return;
@@ -188,6 +190,7 @@ public class LdapRiver extends AbstractRiverComponent implements River {
 
     private class LdapReader implements Runnable {
 
+    	@Override
         public void run() {
             
             BulkRequestBuilder bulkRequest = client.prepareBulk();
@@ -198,40 +201,11 @@ public class LdapRiver extends AbstractRiverComponent implements River {
                 }
 
                 DirContext ctx = null;
-                Properties environment = new Properties();
-
                 try {
-                    environment.put(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.ldap.LdapCtxFactory");
-					if (userDn != null && !"".equals(userDn)) {
-                        environment.put(Context.SECURITY_AUTHENTICATION, "simple");
-                        environment.put(Context.SECURITY_PRINCIPAL, userDn);
-                        environment.put(Context.SECURITY_CREDENTIALS, credentials);
-                    } else {
-                        environment.put(Context.SECURITY_AUTHENTICATION, "none");
-                    }
-
-                    if (ssl) {
-                        environment.put(Context.PROVIDER_URL, "ldaps://" + host + ":" + port);
-                        environment.put(Context.SECURITY_PROTOCOL, "ssl");
-                    } else {
-                        environment.put(Context.PROVIDER_URL, "ldap://" + host + ":" + port);
-                    }
-
-                    ctx = new InitialDirContext(environment);
+                    ctx = setupCtx();
                     int count = 0;
 
-                    SearchControls constraints = new SearchControls();
-                    if ("object".equalsIgnoreCase(scope)) {
-                        constraints.setSearchScope(SearchControls.OBJECT_SCOPE);
-                    } else if ("onelevel".equalsIgnoreCase(scope)) {
-                        constraints.setSearchScope(SearchControls.ONELEVEL_SCOPE);
-                    } else {
-                        constraints.setSearchScope(SearchControls.SUBTREE_SCOPE);
-                    }
-                    
-                    if (attributes != null && attributes.length > 0) {
-                        constraints.setReturningAttributes(attributes);
-                    }
+                    SearchControls constraints = setupConstraints();
                     
                     long start = System.currentTimeMillis();
                     NamingEnumeration<SearchResult> results = ctx.search(baseDn, filter, constraints);
@@ -312,6 +286,45 @@ public class LdapRiver extends AbstractRiverComponent implements River {
                 }
             }
         }
+
+		private SearchControls setupConstraints() {
+			SearchControls constraints = new SearchControls();
+			if ("object".equalsIgnoreCase(scope)) {
+			    constraints.setSearchScope(SearchControls.OBJECT_SCOPE);
+			} else if ("onelevel".equalsIgnoreCase(scope)) {
+			    constraints.setSearchScope(SearchControls.ONELEVEL_SCOPE);
+			} else {
+			    constraints.setSearchScope(SearchControls.SUBTREE_SCOPE);
+			}
+			
+			if (attributes != null && attributes.length > 0) {
+			    constraints.setReturningAttributes(attributes);
+			}
+			return constraints;
+		}
+
+		private InitialDirContext setupCtx() throws NamingException {
+
+			Properties environment = new Properties();
+			
+            environment.put(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.ldap.LdapCtxFactory");
+			if (userDn != null && !"".equals(userDn)) {
+                environment.put(Context.SECURITY_AUTHENTICATION, "simple");
+                environment.put(Context.SECURITY_PRINCIPAL, userDn);
+                environment.put(Context.SECURITY_CREDENTIALS, credentials);
+            } else {
+                environment.put(Context.SECURITY_AUTHENTICATION, "none");
+            }
+
+            if (ssl) {
+                environment.put(Context.PROVIDER_URL, "ldaps://" + host + ":" + port);
+                environment.put(Context.SECURITY_PROTOCOL, "ssl");
+            } else {
+                environment.put(Context.PROVIDER_URL, "ldap://" + host + ":" + port);
+            }
+            
+			return new InitialDirContext(environment);
+		}
         
         private String resolveFieldName(String id) {
             if ((fields != null) && (fields.length > 0)) {
